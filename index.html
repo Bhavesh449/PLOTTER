@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PLOTTER</title>
   <style>
     body {
@@ -17,12 +17,14 @@
       background: #f4f6fa;
       overflow-x: hidden;
     }
+
     h1 {
       color: #333;
       text-align: center;
       font-size: 6vw;
       margin: 15px 0;
     }
+
     .welcomeBox {
       background: red;
       color: white;
@@ -31,7 +33,9 @@
       margin-bottom: 10px;
       font-size: 4vw;
       text-align: center;
+      display: none;
     }
+
     canvas {
       border: 2px solid #333;
       background: #c8f7c5;
@@ -39,31 +43,35 @@
       cursor: crosshair;
       max-width: 95vw;
       height: auto;
+      touch-action: none; /* prevent default touch gestures inside canvas */
     }
+
     .controls {
       margin-top: 10px;
       text-align: center;
       width: 100%;
     }
+
     input[type=text] {
       padding: 6px;
       font-size: 4vw;
       max-width: 40%;
       text-align: center;
     }
+
     button {
       padding: 6px 12px;
       font-size: 4vw;
       margin-left: 5px;
       cursor: pointer;
     }
+
     input[type=range] {
       width: 60%;
       margin-top: 10px;
     }
-    label {
-      font-size: 4vw;
-    }
+
+    label { font-size: 4vw; }
 
     /* Popup styling */
     #loginPopup {
@@ -78,6 +86,7 @@
       align-items: center;
       z-index: 999;
     }
+
     #loginBox {
       background: white;
       padding: 20px;
@@ -86,21 +95,9 @@
       width: 80%;
       max-width: 300px;
     }
-    #loginBox input {
-      padding: 8px;
-      font-size: 16px;
-      width: 100%;
-      margin-bottom: 10px;
-    }
-    #loginBox button {
-      background: red;
-      color: white;
-      border: none;
-      padding: 10px 15px;
-      font-size: 16px;
-      border-radius: 5px;
-      cursor: pointer;
-    }
+
+    #loginBox input { padding: 8px; font-size: 16px; width: 100%; margin-bottom: 10px; }
+    #loginBox button { background: red; color: white; border: none; padding: 10px 15px; font-size: 16px; border-radius: 5px; cursor: pointer; }
 
     @media (min-width: 768px) {
       h1 { font-size: 32px; }
@@ -111,7 +108,7 @@
 </head>
 <body>
   <h1>📈 PLOTTER</h1>
-  <div id="welcomeMsg" class="welcomeBox" style="display:none"></div>
+  <div id="welcomeMsg" class="welcomeBox"></div>
 
   <div class="controls">
     <input id="pointInput" type="text" placeholder="e.g. -2,3">
@@ -132,56 +129,215 @@
       <button onclick="confirmLogin()">Confirm</button>
     </div>
   </div>
-<script>
-  const canvas = document.getElementById("plotterCanvas");
-  const ctx = canvas.getContext("2d");
 
-  const width = canvas.width;
-  const height = canvas.height;
-  let scale = 30; // pixels per unit
-  let points = [];
+  <script>
+    const canvas = document.getElementById("plotterCanvas");
+    const ctx = canvas.getContext("2d");
 
-  // Function to get event position for both mouse and touch
-  function getEventPosition(e) {
-    const rect = canvas.getBoundingClientRect();
-    let cx, cy;
-    if (e.touches && e.touches[0]) {
-      cx = e.touches[0].clientX - rect.left;
-      cy = e.touches[0].clientY - rect.top;
-    } else {
-      cx = e.clientX - rect.left;
-      cy = e.clientY - rect.top;
+    // drawing state
+    let scale = 30; // pixels per unit in internal canvas space
+    let points = []; // {x:number, y:number, removed:boolean}
+
+    // double-tap detection for touch
+    let lastTap = 0;
+    let lastTapPos = null;
+
+    function drawGrid() {
+      // use internal canvas dimensions to draw (these are the coordinate space)
+      const W = canvas.width;
+      const H = canvas.height;
+
+      ctx.clearRect(0, 0, W, H);
+      ctx.strokeStyle = "#ddd";
+      ctx.lineWidth = 1;
+
+      for (let x = 0; x <= W; x += scale) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+        ctx.stroke();
+        let graphX = Math.round((x - W / 2) / scale);
+        if (graphX !== 0) {
+          ctx.fillStyle = "black";
+          ctx.font = "12px Arial";
+          ctx.fillText(graphX, x + 2, H / 2 - 2);
+        }
+      }
+
+      for (let y = 0; y <= H; y += scale) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+        let graphY = Math.round((H / 2 - y) / scale);
+        if (graphY !== 0) {
+          ctx.fillStyle = "black";
+          ctx.font = "12px Arial";
+          ctx.fillText(graphY, W / 2 + 4, y - 2);
+        }
+      }
+
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(W / 2, 0);
+      ctx.lineTo(W / 2, H);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, H / 2);
+      ctx.lineTo(W, H / 2);
+      ctx.stroke();
+
+      // draw points
+      for (let p of points) drawPoint(p.x, p.y, p.removed ? "black" : "red");
+
+      // draw connections if needed
+      if (document.getElementById("intersectionCheckbox").checked) connectPoints();
     }
-    return { cx, cy };
-  }
 
-  // Convert coordinates
-  function toCanvasCoords(x, y) {
-    return [
-      width / 2 + x * scale,
-      height / 2 - y * scale
-    ];
-  }
+    function toCanvasCoords(x, y) {
+      // convert graph coords (logical units) -> internal canvas pixel coords
+      return [canvas.width / 2 + x * scale, canvas.height / 2 - y * scale];
+    }
 
-  function toGraphCoords(cx, cy) {
-    const x = Math.round((cx - width / 2) / scale);
-    const y = Math.round((height / 2 - cy) / scale);
-    return { x, y };
-  }
+    function drawPoint(x, y, color) {
+      const [cx, cy] = toCanvasCoords(x, y);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "blue";
+      ctx.font = "14px Arial";
+      ctx.fillText(`(${x},${y})`, cx + 8, cy - 8);
+    }
 
-  // Event for clicking/tapping
-  function handlePlot(e) {
-    e.preventDefault();
-    const { cx, cy } = getEventPosition(e);
-    const { x, y } = toGraphCoords(cx, cy);
-    plotPoint(x, y);
-  }
+    function plotPoint(x, y) {
+      points.push({ x, y, removed: false });
+      drawGrid();
+    }
 
-  canvas.addEventListener("click", handlePlot);
-  canvas.addEventListener("touchstart", handlePlot);
+    function plotPointFromInput() {
+      const input = document.getElementById("pointInput").value.trim();
+      const match = input.match(/^\(?\s*(-?\d+)\s*,\s*(-?\d+)\s*\)?$/);
+      if (match) plotPoint(parseInt(match[1]), parseInt(match[2]));
+      else alert("Enter point like (x,y), e.g. -2,3");
+    }
 
-  // ... (rest of your plotting, drawing grid, etc.)
-</script>
+    // convert client coords (mouse/touch) to internal canvas pixel coords
+    function getInternalCanvasPos(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (clientX - rect.left) * scaleX;
+      const y = (clientY - rect.top) * scaleY;
+      return [x, y];
+    }
 
+    function handleSinglePointer(clientX, clientY) {
+      const [px, py] = getInternalCanvasPos(clientX, clientY);
+      const gx = Math.round((px - canvas.width / 2) / scale);
+      const gy = Math.round((canvas.height / 2 - py) / scale);
+      plotPoint(gx, gy);
+    }
+
+    function handleDoublePointer(clientX, clientY) {
+      const [px, py] = getInternalCanvasPos(clientX, clientY);
+      const gx = Math.round((px - canvas.width / 2) / scale);
+      const gy = Math.round((canvas.height / 2 - py) / scale);
+      // find exact point and mark removed
+      for (let p of points) {
+        if (!p.removed && p.x === gx && p.y === gy) {
+          p.removed = true;
+          drawGrid();
+          return;
+        }
+      }
+    }
+
+    // mouse events (desktop)
+    canvas.addEventListener('click', function(e) {
+      handleSinglePointer(e.clientX, e.clientY);
+    });
+
+    canvas.addEventListener('dblclick', function(e) {
+      handleDoublePointer(e.clientX, e.clientY);
+    });
+
+    // touch events (mobile)
+    canvas.addEventListener('touchstart', function(e) {
+      // prevent page scroll while interacting with canvas
+      e.preventDefault();
+      const t = e.touches[0];
+      const now = Date.now();
+      const [px, py] = getInternalCanvasPos(t.clientX, t.clientY);
+
+      if (now - lastTap < 350 && lastTapPos && Math.hypot(px - lastTapPos[0], py - lastTapPos[1]) < 30) {
+        // treat as double-tap
+        handleDoublePointer(t.clientX, t.clientY);
+        lastTap = 0;
+        lastTapPos = null;
+      } else {
+        handleSinglePointer(t.clientX, t.clientY);
+        lastTap = now;
+        lastTapPos = [px, py];
+      }
+    }, { passive: false });
+
+    // connect all non-removed points (simple polygon path)
+    function connectPoints() {
+      const alive = points.filter(p => !p.removed);
+      if (alive.length < 2) return;
+      ctx.strokeStyle = "purple";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < alive.length; i++) {
+        const [cx, cy] = toCanvasCoords(alive[i].x, alive[i].y);
+        if (i === 0) ctx.moveTo(cx, cy);
+        else ctx.lineTo(cx, cy);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    // zoom slider
+    document.getElementById('zoomSlider').addEventListener('input', function() {
+      scale = parseInt(this.value);
+      drawGrid();
+    });
+
+    document.getElementById('intersectionCheckbox').addEventListener('change', drawGrid);
+
+    // login logic (localStorage)
+    function confirmLogin() {
+      const username = document.getElementById('usernameInput').value.trim();
+      if (!username) return alert('Please enter username');
+      localStorage.setItem('username', username);
+      setWelcome(username);
+      document.getElementById('loginPopup').style.display = 'none';
+    }
+
+    function setWelcome(username) {
+      const welcomeMsg = document.getElementById('welcomeMsg');
+      if (username === 'BhaveshOwner') welcomeMsg.innerText = 'Welcome, Owner';
+      else if (username === '@Mayank' || username === '@Rehan') welcomeMsg.innerText = 'Welcome, CEO of Toppers Group';
+      else welcomeMsg.innerText = `Welcome, ${username}`;
+      welcomeMsg.style.display = 'block';
+    }
+
+    // initial setup: skip login if stored and draw grid
+    window.addEventListener('load', function() {
+      const savedUser = localStorage.getItem('username');
+      if (savedUser) {
+        setWelcome(savedUser);
+        document.getElementById('loginPopup').style.display = 'none';
+      }
+      drawGrid();
+    });
+
+    // keep canvas responsive: when window resizes, the CSS size changes but internal canvas size stays fixed
+    // we don't need to change internal size; event mapping uses boundingClientRect so plotting stays correct
+    // however, on very high-DPR devices you may want to increase internal resolution for crisper drawing.
+
+  </script>
 </body>
 </html>

@@ -2,126 +2,146 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PLOTTER</title>
   <style>
     body {
-      text-align: center;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
       font-family: Arial, sans-serif;
       background: #f4f6fa;
-      margin: 0;
+      overflow-x: hidden;
     }
     h1 {
       color: #333;
-      margin: 20px 0 10px;
+      text-align: center;
+      font-size: 6vw;
+      margin: 15px 0;
     }
-    .welcome-box {
-      display: none;
+    .welcomeBox {
       background: red;
       color: white;
-      font-size: 18px;
-      padding: 5px 15px;
-      border-radius: 8px;
+      padding: 6px 12px;
+      border-radius: 6px;
       margin-bottom: 10px;
-      display: inline-block;
+      font-size: 4vw;
+      text-align: center;
     }
     canvas {
       border: 2px solid #333;
-      background: #c8f7c5; /* green background for graph sheet */
-      margin-top: 20px;
+      background: #c8f7c5;
+      margin-top: 10px;
       cursor: crosshair;
+      max-width: 95vw;
+      height: auto;
     }
     .controls {
-      margin-top: 15px;
+      margin-top: 10px;
+      text-align: center;
+      width: 100%;
     }
-    input {
+    input[type=text] {
       padding: 6px;
-      font-size: 16px;
+      font-size: 4vw;
+      max-width: 40%;
       text-align: center;
     }
-    button, input[type=range] {
+    button {
       padding: 6px 12px;
-      font-size: 16px;
+      font-size: 4vw;
       margin-left: 5px;
       cursor: pointer;
     }
     input[type=range] {
-      width: 200px;
+      width: 60%;
+      margin-top: 10px;
     }
     label {
-      font-size: 16px;
-      margin-left: 10px;
+      font-size: 4vw;
     }
 
-    /* Login popup */
+    /* Popup styling */
     #loginPopup {
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.5);
+      background: rgba(0, 0, 0, 0.6);
       display: flex;
       justify-content: center;
       align-items: center;
-      z-index: 1000;
+      z-index: 999;
     }
     #loginBox {
       background: white;
       padding: 20px;
       border-radius: 10px;
       text-align: center;
-      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      width: 80%;
+      max-width: 300px;
     }
     #loginBox input {
       padding: 8px;
       font-size: 16px;
+      width: 100%;
       margin-bottom: 10px;
-      width: 200px;
     }
     #loginBox button {
-      padding: 8px 16px;
       background: red;
       color: white;
       border: none;
-      border-radius: 5px;
+      padding: 10px 15px;
       font-size: 16px;
+      border-radius: 5px;
       cursor: pointer;
+    }
+
+    @media (min-width: 768px) {
+      h1 { font-size: 32px; }
+      .welcomeBox { font-size: 20px; }
+      input[type=text], button, label { font-size: 16px; }
     }
   </style>
 </head>
 <body>
-  <div id="loginPopup">
-    <div id="loginBox">
-      <h2>Login</h2>
-      <input type="text" id="username" placeholder="Username"><br>
-      <button onclick="confirmLogin()">Confirm</button>
-    </div>
-  </div>
-
   <h1>📈 PLOTTER</h1>
-  <div id="welcomeMessage" class="welcome-box"></div>
+  <div id="welcomeMsg" class="welcomeBox" style="display:none"></div>
 
   <div class="controls">
     <input id="pointInput" type="text" placeholder="e.g. -2,3">
     <button onclick="plotPointFromInput()">Plot Point</button>
     <br><br>
-    Zoom: <input type="range" id="zoomSlider" min="5" max="100" value="30" step="5">
+    <label><input type="checkbox" id="intersectionCheckbox"> Intersection</label>
     <br><br>
-    <input type="checkbox" id="intersectionCheck"> <label for="intersectionCheck">Intersection Mode</label>
+    Zoom: <input type="range" id="zoomSlider" min="5" max="100" value="30" step="5">
   </div>
 
   <canvas id="plotterCanvas" width="600" height="600"></canvas>
 
+  <div id="loginPopup">
+    <div id="loginBox">
+      <h2>Login</h2>
+      <input type="text" id="usernameInput" placeholder="Username">
+      <br>
+      <button onclick="confirmLogin()">Confirm</button>
+    </div>
+  </div>
+
   <script>
     const canvas = document.getElementById("plotterCanvas");
     const ctx = canvas.getContext("2d");
-
     const width = canvas.width;
     const height = canvas.height;
-    let scale = 30; // pixels per unit (zoom level)
-    let points = []; // store plotted points
+    let scale = 30;
 
-    // Draw axes and grid with numbers
+    let points = [];
+
     function drawGrid() {
       ctx.clearRect(0, 0, width, height);
       ctx.strokeStyle = "#ddd";
@@ -159,24 +179,20 @@
       ctx.moveTo(width / 2, 0);
       ctx.lineTo(width / 2, height);
       ctx.stroke();
-
       ctx.beginPath();
       ctx.moveTo(0, height / 2);
       ctx.lineTo(width, height / 2);
       ctx.stroke();
 
-      points.forEach(p => drawPoint(p.x, p.y, p.color));
-
-      if (document.getElementById("intersectionCheck").checked) {
-        drawConnections();
-      }
+      points.forEach(p => drawPoint(p.x, p.y, p.removed ? "black" : "red"));
+      if (document.getElementById("intersectionCheckbox").checked) connectPoints();
     }
 
     function toCanvasCoords(x, y) {
       return [width / 2 + x * scale, height / 2 - y * scale];
     }
 
-    function drawPoint(x, y, color="red") {
+    function drawPoint(x, y, color) {
       const [cx, cy] = toCanvasCoords(x, y);
       ctx.fillStyle = color;
       ctx.beginPath();
@@ -188,27 +204,18 @@
     }
 
     function plotPoint(x, y) {
-      points.push({x, y, color: "red"});
+      points.push({ x, y, removed: false });
       drawGrid();
     }
 
-    function drawConnections() {
-      if (points.length < 2) return;
-      ctx.strokeStyle = "green";
-      ctx.lineWidth = 2;
-      for (let i = 0; i < points.length; i++) {
-        for (let j = i + 1; j < points.length; j++) {
-          const [x1, y1] = toCanvasCoords(points[i].x, points[i].y);
-          const [x2, y2] = toCanvasCoords(points[j].x, points[j].y);
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
-        }
-      }
+    function plotPointFromInput() {
+      const input = document.getElementById("pointInput").value.trim();
+      const match = input.match(/^\(?\s*(-?\d+)\s*,\s*(-?\d+)\s*\)?$/);
+      if (match) plotPoint(parseInt(match[1]), parseInt(match[2]));
+      else alert("Enter point like (x,y), e.g. -2,3");
     }
 
-    canvas.addEventListener("click", (e) => {
+    canvas.addEventListener("click", e => {
       const rect = canvas.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
@@ -217,71 +224,68 @@
       plotPoint(x, y);
     });
 
-    canvas.addEventListener("dblclick", (e) => {
+    canvas.addEventListener("dblclick", e => {
       const rect = canvas.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
-      for (let p of points) {
-        const [px, py] = toCanvasCoords(p.x, p.y);
-        const dx = cx - px;
-        const dy = cy - py;
-        if (Math.sqrt(dx*dx + dy*dy) <= 6) {
-          p.color = "black";
-          drawGrid();
-          return;
-        }
-      }
+      const x = Math.round((cx - width / 2) / scale);
+      const y = Math.round((height / 2 - cy) / scale);
+      let found = points.find(p => p.x === x && p.y === y && !p.removed);
+      if (found) found.removed = true;
+      drawGrid();
     });
-
-    function plotPointFromInput() {
-      const input = document.getElementById("pointInput").value.trim();
-      const match = input.match(/^\(?\s*(-?\d+)\s*,\s*(-?\d+)\s*\)?$/);
-      if (match) {
-        const x = parseInt(match[1]);
-        const y = parseInt(match[2]);
-        plotPoint(x, y);
-      } else {
-        alert("Enter point like (x,y), e.g. -2,3");
-      }
-    }
 
     document.getElementById("zoomSlider").addEventListener("input", function() {
       scale = parseInt(this.value);
       drawGrid();
     });
 
-    document.getElementById("intersectionCheck").addEventListener("change", drawGrid);
+    document.getElementById("intersectionCheckbox").addEventListener("change", drawGrid);
 
-    drawGrid();
-
-    // Login logic
-    window.onload = function() {
-      const savedUser = localStorage.getItem("username");
-      if (savedUser) {
-        showWelcome(savedUser);
-        document.getElementById("loginPopup").style.display = "none";
-      }
+    function connectPoints() {
+      if (points.length < 2) return;
+      ctx.strokeStyle = "purple";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let first = true;
+      points.forEach(p => {
+        if (!p.removed) {
+          const [cx, cy] = toCanvasCoords(p.x, p.y);
+          if (first) {
+            ctx.moveTo(cx, cy);
+            first = false;
+          } else {
+            ctx.lineTo(cx, cy);
+          }
+        }
+      });
+      ctx.closePath();
+      ctx.stroke();
     }
 
     function confirmLogin() {
-      const username = document.getElementById("username").value.trim();
-      if (username) {
-        localStorage.setItem("username", username);
-        showWelcome(username);
-        document.getElementById("loginPopup").style.display = "none";
-      }
+      const username = document.getElementById("usernameInput").value.trim();
+      if (!username) return alert("Please enter username");
+      localStorage.setItem("username", username);
+      setWelcome(username);
+      document.getElementById("loginPopup").style.display = "none";
     }
 
-    function showWelcome(username) {
-      const welcomeBox = document.getElementById("welcomeMessage");
-      if (username === "BhaveshOwner") {
-        welcomeBox.innerText = "Welcome, Owner";
-      } else if (username === "@Mayank" || username === "@Rehan") {
-        welcomeBox.innerText = "Welcome, CEO of Toppers Group";
-      } else {
-        welcomeBox.innerText = `Welcome, ${username}`;
+    function setWelcome(username) {
+      const welcomeMsg = document.getElementById("welcomeMsg");
+      if (username === "BhaveshOwner") welcomeMsg.innerText = "Welcome, Owner";
+      else if (username === "@Mayank" || username === "@Rehan") welcomeMsg.innerText = "Welcome, CEO of Toppers Group";
+      else welcomeMsg.innerText = `Welcome, ${username}`;
+      welcomeMsg.style.display = "block";
+    }
+
+    window.onload = function() {
+      const savedUser = localStorage.getItem("username");
+      if (savedUser) {
+        setWelcome(savedUser);
+        document.getElementById("loginPopup").style.display = "none";
       }
-      welcomeBox.style.display = "inline-block";
+      drawGrid();
     }
   </script>
 </body>

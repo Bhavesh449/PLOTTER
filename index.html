@@ -132,161 +132,56 @@
       <button onclick="confirmLogin()">Confirm</button>
     </div>
   </div>
+<script>
+  const canvas = document.getElementById("plotterCanvas");
+  const ctx = canvas.getContext("2d");
 
-  <script>
-    const canvas = document.getElementById("plotterCanvas");
-    const ctx = canvas.getContext("2d");
-    const width = canvas.width;
-    const height = canvas.height;
-    let scale = 30;
+  const width = canvas.width;
+  const height = canvas.height;
+  let scale = 30; // pixels per unit
+  let points = [];
 
-    let points = [];
-
-    function drawGrid() {
-      ctx.clearRect(0, 0, width, height);
-      ctx.strokeStyle = "#ddd";
-      ctx.lineWidth = 1;
-
-      for (let x = 0; x <= width; x += scale) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-        let graphX = Math.round((x - width / 2) / scale);
-        if (graphX !== 0) {
-          ctx.fillStyle = "black";
-          ctx.font = "12px Arial";
-          ctx.fillText(graphX, x + 2, height / 2 - 2);
-        }
-      }
-
-      for (let y = 0; y <= height; y += scale) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-        let graphY = Math.round((height / 2 - y) / scale);
-        if (graphY !== 0) {
-          ctx.fillStyle = "black";
-          ctx.font = "12px Arial";
-          ctx.fillText(graphY, width / 2 + 4, y - 2);
-        }
-      }
-
-      ctx.strokeStyle = "#000";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(width / 2, 0);
-      ctx.lineTo(width / 2, height);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, height / 2);
-      ctx.lineTo(width, height / 2);
-      ctx.stroke();
-
-      points.forEach(p => drawPoint(p.x, p.y, p.removed ? "black" : "red"));
-      if (document.getElementById("intersectionCheckbox").checked) connectPoints();
+  // Function to get event position for both mouse and touch
+  function getEventPosition(e) {
+    const rect = canvas.getBoundingClientRect();
+    let cx, cy;
+    if (e.touches && e.touches[0]) {
+      cx = e.touches[0].clientX - rect.left;
+      cy = e.touches[0].clientY - rect.top;
+    } else {
+      cx = e.clientX - rect.left;
+      cy = e.clientY - rect.top;
     }
+    return { cx, cy };
+  }
 
-    function toCanvasCoords(x, y) {
-      return [width / 2 + x * scale, height / 2 - y * scale];
-    }
+  // Convert coordinates
+  function toCanvasCoords(x, y) {
+    return [
+      width / 2 + x * scale,
+      height / 2 - y * scale
+    ];
+  }
 
-    function drawPoint(x, y, color) {
-      const [cx, cy] = toCanvasCoords(x, y);
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "blue";
-      ctx.font = "14px Arial";
-      ctx.fillText(`(${x},${y})`, cx + 8, cy - 8);
-    }
+  function toGraphCoords(cx, cy) {
+    const x = Math.round((cx - width / 2) / scale);
+    const y = Math.round((height / 2 - cy) / scale);
+    return { x, y };
+  }
 
-    function plotPoint(x, y) {
-      points.push({ x, y, removed: false });
-      drawGrid();
-    }
+  // Event for clicking/tapping
+  function handlePlot(e) {
+    e.preventDefault();
+    const { cx, cy } = getEventPosition(e);
+    const { x, y } = toGraphCoords(cx, cy);
+    plotPoint(x, y);
+  }
 
-    function plotPointFromInput() {
-      const input = document.getElementById("pointInput").value.trim();
-      const match = input.match(/^\(?\s*(-?\d+)\s*,\s*(-?\d+)\s*\)?$/);
-      if (match) plotPoint(parseInt(match[1]), parseInt(match[2]));
-      else alert("Enter point like (x,y), e.g. -2,3");
-    }
+  canvas.addEventListener("click", handlePlot);
+  canvas.addEventListener("touchstart", handlePlot);
 
-    canvas.addEventListener("click", e => {
-      const rect = canvas.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-      const x = Math.round((cx - width / 2) / scale);
-      const y = Math.round((height / 2 - cy) / scale);
-      plotPoint(x, y);
-    });
+  // ... (rest of your plotting, drawing grid, etc.)
+</script>
 
-    canvas.addEventListener("dblclick", e => {
-      const rect = canvas.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-      const x = Math.round((cx - width / 2) / scale);
-      const y = Math.round((height / 2 - cy) / scale);
-      let found = points.find(p => p.x === x && p.y === y && !p.removed);
-      if (found) found.removed = true;
-      drawGrid();
-    });
-
-    document.getElementById("zoomSlider").addEventListener("input", function() {
-      scale = parseInt(this.value);
-      drawGrid();
-    });
-
-    document.getElementById("intersectionCheckbox").addEventListener("change", drawGrid);
-
-    function connectPoints() {
-      if (points.length < 2) return;
-      ctx.strokeStyle = "purple";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      let first = true;
-      points.forEach(p => {
-        if (!p.removed) {
-          const [cx, cy] = toCanvasCoords(p.x, p.y);
-          if (first) {
-            ctx.moveTo(cx, cy);
-            first = false;
-          } else {
-            ctx.lineTo(cx, cy);
-          }
-        }
-      });
-      ctx.closePath();
-      ctx.stroke();
-    }
-
-    function confirmLogin() {
-      const username = document.getElementById("usernameInput").value.trim();
-      if (!username) return alert("Please enter username");
-      localStorage.setItem("username", username);
-      setWelcome(username);
-      document.getElementById("loginPopup").style.display = "none";
-    }
-
-    function setWelcome(username) {
-      const welcomeMsg = document.getElementById("welcomeMsg");
-      if (username === "BhaveshOwner") welcomeMsg.innerText = "Welcome, Owner";
-      else if (username === "@Mayank" || username === "@Rehan") welcomeMsg.innerText = "Welcome, CEO of Toppers Group";
-      else welcomeMsg.innerText = `Welcome, ${username}`;
-      welcomeMsg.style.display = "block";
-    }
-
-    window.onload = function() {
-      const savedUser = localStorage.getItem("username");
-      if (savedUser) {
-        setWelcome(savedUser);
-        document.getElementById("loginPopup").style.display = "none";
-      }
-      drawGrid();
-    }
-  </script>
 </body>
 </html>
